@@ -1,3 +1,10 @@
 db and phpmyadmin: docker compose up 
 backend: node index.js
 frontend: npm run dev
+
+API:
+- POST /api/sync/prices
+  body: { "start": "ISO-8601 UTC", "end": "ISO-8601 UTC", "location": "EE|LV|FI" }
+  defaults: start/end = current UTC day range, location = EE
+  errors: { "error": "PRICE_API_UNAVAILABLE" } when external API is unavailable
+- GET /api/readings?start=...&end=...&location=EE|LV|FI

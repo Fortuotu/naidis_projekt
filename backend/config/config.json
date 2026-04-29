@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "app",
+    "password": "app_pw",
+    "database": "app_db",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "test": {
+    "username": "app",
+    "password": "app_pw",
+    "database": "app_db",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "app",
+    "password": "app_pw",
+    "database": "app_db",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}

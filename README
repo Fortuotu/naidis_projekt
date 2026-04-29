@@ -1,0 +1,3 @@
+db and phpmyadmin: docker compose up 
+backend: node index.js
+frontend: npm run dev

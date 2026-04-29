@@ -37,6 +37,38 @@ function normalizeLocation(location) {
   return String(location).trim().toUpperCase();
 }
 
+function parseLocationsQuery(locationQuery) {
+  const rawValues = Array.isArray(locationQuery) ? locationQuery : [locationQuery];
+
+  const parsed = rawValues
+    .filter(value => value !== undefined && value !== null && value !== '')
+    .flatMap(value => String(value).split(','))
+    .map(value => normalizeLocation(value))
+    .filter((value, index, arr) => value && arr.indexOf(value) === index);
+
+  if (parsed.length === 0) {
+    return {
+      isValid: false,
+      locations: [],
+      message: 'location is required'
+    };
+  }
+
+  const invalidLocation = parsed.find(location => !ALLOWED_LOCATIONS.has(location));
+  if (invalidLocation) {
+    return {
+      isValid: false,
+      locations: [],
+      message: 'location must be one of: EE, LV, FI'
+    };
+  }
+
+  return {
+    isValid: true,
+    locations: parsed
+  };
+}
+
 function toIsoUtcNoMs(date) {
   return date.toISOString().replace('.000Z', 'Z');
 }
@@ -257,13 +289,10 @@ app.post('/api/import/json', async (req, res) => {
 
 app.get('/api/readings', async (req, res) => {
   const { start, end, location } = req.query;
+  const parsedLocations = parseLocationsQuery(location);
 
-  if (!location) {
-    return res.status(400).json({ message: 'location is required' });
-  }
-
-  if (!ALLOWED_LOCATIONS.has(location)) {
-    return res.status(400).json({ message: 'location must be one of: EE, LV, FI' });
+  if (!parsedLocations.isValid) {
+    return res.status(400).json({ message: parsedLocations.message });
   }
 
   if (!start || !end) {
@@ -279,13 +308,15 @@ app.get('/api/readings', async (req, res) => {
   try {
     const readings = await EnergyReadings.findAll({
       where: {
-        location,
+        location: {
+          [Op.in]: parsedLocations.locations
+        },
         timestamp: {
           [Op.gte]: new Date(start),
           [Op.lte]: new Date(end)
         }
       },
-      order: [['timestamp', 'ASC']]
+      order: [['timestamp', 'ASC'], ['location', 'ASC']]
     });
 
     return res.json(readings);

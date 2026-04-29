@@ -11,8 +11,25 @@ type EnergyReading = {
   source: 'API' | 'UPLOAD';
 };
 
+type TimePoint = {
+  x: number;
+  y: number;
+};
+
+type LineSeries = {
+  label: string;
+  color: string;
+  points: TimePoint[];
+};
+
 const CHART_WIDTH = 900;
 const CHART_HEIGHT = 320;
+const LOCATION_CODES: LocationCode[] = ['EE', 'LV', 'FI'];
+const LOCATION_COLORS: Record<LocationCode, string> = {
+  EE: '#2563eb',
+  LV: '#16a34a',
+  FI: '#f97316'
+};
 
 function toDatetimeLocalValue(date: Date) {
   const offsetMs = date.getTimezoneOffset() * 60 * 1000;
@@ -38,9 +55,159 @@ function formatDisplayTimestamp(value: string) {
   return new Date(value).toLocaleString();
 }
 
+function scalePoints(points: TimePoint[]) {
+  if (points.length === 0) {
+    return '';
+  }
+
+  const xValues = points.map(point => point.x);
+  const yValues = points.map(point => point.y);
+  const minX = Math.min(...xValues);
+  const maxX = Math.max(...xValues);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
+  const xScale = maxX === minX ? 1 : CHART_WIDTH / (maxX - minX);
+  const yScale = maxY === minY ? 1 : CHART_HEIGHT / (maxY - minY);
+
+  return points
+    .map(point => {
+      const x = (point.x - minX) * xScale;
+      const y = CHART_HEIGHT - ((point.y - minY) * yScale);
+      return `${x},${y}`;
+    })
+    .join(' ');
+}
+
+function SingleLineChart({ title, points }: { title: string; points: TimePoint[] }) {
+  if (points.length === 0) {
+    return (
+      <section className="chart-card">
+        <h2>{title}</h2>
+        <p>Andmed puuduvad valitud filtriga.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="chart-card">
+      <h2>{title}</h2>
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label={title}>
+        <polyline points={scalePoints(points)} fill="none" stroke="#2563eb" strokeWidth="3" />
+      </svg>
+    </section>
+  );
+}
+
+function MultiLineChart({ title, series }: { title: string; series: LineSeries[] }) {
+  const nonEmptySeries = series.filter(item => item.points.length > 0);
+  if (nonEmptySeries.length === 0) {
+    return (
+      <section className="chart-card">
+        <h2>{title}</h2>
+        <p>Andmed puuduvad valitud filtriga.</p>
+      </section>
+    );
+  }
+
+  const allPoints = nonEmptySeries.flatMap(item => item.points);
+  const minX = Math.min(...allPoints.map(point => point.x));
+  const maxX = Math.max(...allPoints.map(point => point.x));
+  const minY = Math.min(...allPoints.map(point => point.y));
+  const maxY = Math.max(...allPoints.map(point => point.y));
+  const xScale = maxX === minX ? 1 : CHART_WIDTH / (maxX - minX);
+  const yScale = maxY === minY ? 1 : CHART_HEIGHT / (maxY - minY);
+
+  return (
+    <section className="chart-card">
+      <h2>{title}</h2>
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label={title}>
+        {nonEmptySeries.map(item => {
+          const points = item.points
+            .map(point => {
+              const x = (point.x - minX) * xScale;
+              const y = CHART_HEIGHT - ((point.y - minY) * yScale);
+              return `${x},${y}`;
+            })
+            .join(' ');
+
+          return (
+            <polyline
+              key={item.label}
+              points={points}
+              fill="none"
+              stroke={item.color}
+              strokeWidth="3"
+            />
+          );
+        })}
+      </svg>
+      <div className="legend">
+        {series.map(item => (
+          <span key={item.label}>
+            <i style={{ backgroundColor: item.color }} />
+            {item.label}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function LocationBarChart({
+  title,
+  values
+}: {
+  title: string;
+  values: Array<{ location: LocationCode; avg: number }>;
+}) {
+  if (values.length === 0) {
+    return (
+      <section className="chart-card">
+        <h2>{title}</h2>
+        <p>Andmed puuduvad valitud filtriga.</p>
+      </section>
+    );
+  }
+
+  const maxValue = Math.max(...values.map(value => value.avg));
+  const barWidth = CHART_WIDTH / values.length;
+
+  return (
+    <section className="chart-card">
+      <h2>{title}</h2>
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label={title}>
+        {values.map((value, index) => {
+          const height = maxValue === 0 ? 0 : (value.avg / maxValue) * (CHART_HEIGHT - 30);
+          const x = index * barWidth + barWidth * 0.15;
+          const y = CHART_HEIGHT - height;
+          return (
+            <rect
+              key={value.location}
+              x={x}
+              y={y}
+              width={barWidth * 0.7}
+              height={height}
+              fill={LOCATION_COLORS[value.location]}
+              rx="6"
+            />
+          );
+        })}
+      </svg>
+      <div className="legend">
+        {values.map(value => (
+          <span key={value.location}>
+            <i style={{ backgroundColor: LOCATION_COLORS[value.location] }} />
+            {value.location}: {value.avg.toFixed(2)} EUR/MWh
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const defaultRange = useMemo(() => getDefaultRange(), []);
-  const [location, setLocation] = useState<LocationCode>('EE');
+  const [selectedLocations, setSelectedLocations] = useState<LocationCode[]>(LOCATION_CODES);
   const [start, setStart] = useState(defaultRange.start);
   const [end, setEnd] = useState(defaultRange.end);
   const [syncLocation, setSyncLocation] = useState<LocationCode>('EE');
@@ -54,50 +221,133 @@ function App() {
   const [readingsLoading, setReadingsLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
 
-  const hasData = readings.length > 0;
-
-  const chartPoints = useMemo(() => {
-    if (!hasData) {
-      return '';
-    }
-
-    const prices = readings.map(r => r.price_eur_mwh);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const xStep = readings.length > 1 ? CHART_WIDTH / (readings.length - 1) : CHART_WIDTH;
-    const yScale = maxPrice === minPrice ? 1 : CHART_HEIGHT / (maxPrice - minPrice);
-
-    return readings
-      .map((reading, index) => {
-        const x = index * xStep;
-        const y = CHART_HEIGHT - ((reading.price_eur_mwh - minPrice) * yScale);
-        return `${x},${y}`;
-      })
-      .join(' ');
-  }, [hasData, readings]);
+  const validReadings = useMemo(() => {
+    return readings.filter(reading => {
+      if (!Number.isFinite(reading.price_eur_mwh)) {
+        return false;
+      }
+      return !Number.isNaN(new Date(reading.timestamp).getTime());
+    });
+  }, [readings]);
 
   const stats = useMemo(() => {
-    if (!hasData) {
+    if (validReadings.length === 0) {
       return null;
     }
-    const prices = readings.map(r => r.price_eur_mwh);
+    const prices = validReadings.map(reading => reading.price_eur_mwh);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     const avg = prices.reduce((sum, value) => sum + value, 0) / prices.length;
     return { min, max, avg };
-  }, [hasData, readings]);
+  }, [validReadings]);
+
+  const priceOverTimePoints = useMemo(() => {
+    const grouped = new Map<string, { timestampMs: number; sum: number; count: number }>();
+
+    for (const reading of validReadings) {
+      const timestampMs = new Date(reading.timestamp).getTime();
+      const key = String(timestampMs);
+      const current = grouped.get(key);
+      if (!current) {
+        grouped.set(key, { timestampMs, sum: reading.price_eur_mwh, count: 1 });
+        continue;
+      }
+      current.sum += reading.price_eur_mwh;
+      current.count += 1;
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => a.timestampMs - b.timestampMs)
+      .map(item => ({
+        x: item.timestampMs,
+        y: item.sum / item.count
+      }));
+  }, [validReadings]);
+
+  const dailyAveragePoints = useMemo(() => {
+    const grouped = new Map<string, { dayStartMs: number; sum: number; count: number }>();
+
+    for (const reading of validReadings) {
+      const readingDate = new Date(reading.timestamp);
+      const dayKey = readingDate.toISOString().slice(0, 10);
+      const dayStartMs = new Date(`${dayKey}T00:00:00.000Z`).getTime();
+      const current = grouped.get(dayKey);
+      if (!current) {
+        grouped.set(dayKey, { dayStartMs, sum: reading.price_eur_mwh, count: 1 });
+        continue;
+      }
+      current.sum += reading.price_eur_mwh;
+      current.count += 1;
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => a.dayStartMs - b.dayStartMs)
+      .map(item => ({
+        x: item.dayStartMs,
+        y: item.sum / item.count
+      }));
+  }, [validReadings]);
+
+  const averageByLocation = useMemo(() => {
+    const grouped = new Map<LocationCode, { sum: number; count: number }>();
+
+    for (const reading of validReadings) {
+      const current = grouped.get(reading.location) ?? { sum: 0, count: 0 };
+      current.sum += reading.price_eur_mwh;
+      current.count += 1;
+      grouped.set(reading.location, current);
+    }
+
+    return selectedLocations
+      .map(location => {
+        const data = grouped.get(location);
+        if (!data || data.count === 0) {
+          return null;
+        }
+        return {
+          location,
+          avg: data.sum / data.count
+        };
+      })
+      .filter((value): value is { location: LocationCode; avg: number } => value !== null);
+  }, [selectedLocations, validReadings]);
+
+  const compareSeries = useMemo(() => {
+    return selectedLocations.map(location => {
+      const points = validReadings
+        .filter(reading => reading.location === location)
+        .map(reading => ({
+          x: new Date(reading.timestamp).getTime(),
+          y: reading.price_eur_mwh
+        }))
+        .sort((a, b) => a.x - b.x);
+
+      return {
+        label: location,
+        color: LOCATION_COLORS[location],
+        points
+      };
+    });
+  }, [selectedLocations, validReadings]);
+
+  const locationCounts = useMemo(() => {
+    return selectedLocations.map(location => ({
+      location,
+      count: validReadings.filter(reading => reading.location === location).length
+    }));
+  }, [selectedLocations, validReadings]);
 
   async function fetchReadings(
     rangeStart = start,
     rangeEnd = end,
-    rangeLocation: LocationCode = location
+    locations: LocationCode[] = selectedLocations
   ) {
     const startIso = new Date(rangeStart).toISOString();
     const endIso = new Date(rangeEnd).toISOString();
     const params = new URLSearchParams({
       start: startIso,
       end: endIso,
-      location: rangeLocation
+      location: locations.join(',')
     });
 
     const response = await fetch(`/api/readings?${params.toString()}`);
@@ -107,8 +357,20 @@ function App() {
       throw new Error(payload.message || 'Failed to fetch readings');
     }
 
-    setReadings(payload);
+    setReadings(Array.isArray(payload) ? payload : []);
   }
+
+  function toggleLocation(location: LocationCode) {
+    setSelectedLocations(current => {
+      if (current.includes(location)) {
+        if (current.length === 1) {
+          return current;
+        }
+        return current.filter(item => item !== location);
+      }
+      return [...current, location];
+    });
+  }2
 
   async function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,10 +413,14 @@ function App() {
         throw new Error(payload.error || payload.message || 'Sync failed');
       }
 
-      setLocation(syncLocation);
+      const nextLocations = selectedLocations.includes(syncLocation)
+        ? selectedLocations
+        : [...selectedLocations, syncLocation];
+
+      setSelectedLocations(nextLocations);
       setStart(syncStart);
       setEnd(syncEnd);
-      await fetchReadings(syncStart, syncEnd, syncLocation);
+      await fetchReadings(syncStart, syncEnd, nextLocations);
       setSyncMessage(`Hinnad sünkrooniti edukalt. Andmebaasi imporditi ${payload.synced} kirjet.`);
     } catch (syncError) {
       const text = syncError instanceof Error ? syncError.message : 'Sync failed';
@@ -174,7 +440,7 @@ function App() {
         const params = new URLSearchParams({
           start: new Date(defaultRange.start).toISOString(),
           end: new Date(defaultRange.end).toISOString(),
-          location: 'EE'
+          location: LOCATION_CODES.join(',')
         });
         const response = await fetch(`/api/readings?${params.toString()}`);
         const payload = await response.json();
@@ -182,7 +448,7 @@ function App() {
           throw new Error(payload.message || 'Failed to fetch readings');
         }
         if (!cancelled) {
-          setReadings(payload);
+          setReadings(Array.isArray(payload) ? payload : []);
         }
       } catch {
         if (!cancelled) {
@@ -195,7 +461,7 @@ function App() {
       }
     }
 
-    loadInitialData();
+    void loadInitialData();
 
     return () => {
       cancelled = true;
@@ -219,9 +485,9 @@ function App() {
               onChange={(event) => setSyncLocation(event.target.value as LocationCode)}
               disabled={syncLoading}
             >
-              <option value="EE">EE</option>
-              <option value="LV">LV</option>
-              <option value="FI">FI</option>
+              {LOCATION_CODES.map(location => (
+                <option key={location} value={location}>{location}</option>
+              ))}
             </select>
           </label>
 
@@ -257,14 +523,21 @@ function App() {
       </section>
 
       <form className="filters" onSubmit={handleFilterSubmit}>
-        <label>
-          Asukoht
-          <select value={location} onChange={(event) => setLocation(event.target.value as LocationCode)}>
-            <option value="EE">EE</option>
-            <option value="LV">LV</option>
-            <option value="FI">FI</option>
-          </select>
-        </label>
+        <fieldset className="location-filter">
+          <legend>Asukohad</legend>
+          <div className="location-options">
+            {LOCATION_CODES.map(location => (
+              <label key={location}>
+                <input
+                  type="checkbox"
+                  checked={selectedLocations.includes(location)}
+                  onChange={() => toggleLocation(location)}
+                />
+                {location}
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <label>
           Algus
@@ -291,17 +564,14 @@ function App() {
 
       {filterMessage && <p className="info">{filterMessage}</p>}
       {filterError && <p className="error">{filterError}</p>}
+      <p className="info">
+        {locationCounts.map(item => `${item.location}: ${item.count} kirjet`).join(' | ')}
+      </p>
 
-      <section className="chart-card">
-        <h2>Hinnagraafik</h2>
-        {hasData ? (
-          <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label="Elektrihinna graafik">
-            <polyline points={chartPoints} fill="none" stroke="#2563eb" strokeWidth="3" />
-          </svg>
-        ) : (
-          <p>Andmed puuduvad valitud filtriga.</p>
-        )}
-      </section>
+      <SingleLineChart title="1) Price over time" points={priceOverTimePoints} />
+      <SingleLineChart title="2) Daily average price in selected date range" points={dailyAveragePoints} />
+      <LocationBarChart title="3) Average price per selected location" values={averageByLocation} />
+      <MultiLineChart title="4) Compare prices per location on selected period" series={compareSeries} />
 
       {stats && (
         <section className="stats">
@@ -311,7 +581,7 @@ function App() {
         </section>
       )}
 
-      {hasData && (
+      {validReadings.length > 0 && (
         <section className="table-card">
           <h2>Kirjed</h2>
           <table>
@@ -324,7 +594,7 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {readings.map((reading) => (
+              {validReadings.map((reading) => (
                 <tr key={`${reading.location}-${reading.timestamp}`}>
                   <td>{formatDisplayTimestamp(reading.timestamp)}</td>
                   <td>{reading.location}</td>

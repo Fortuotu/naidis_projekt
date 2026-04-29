@@ -8,3 +8,4 @@ API:
   defaults: start/end = current UTC day range, location = EE
   errors: { "error": "PRICE_API_UNAVAILABLE" } when external API is unavailable
 - GET /api/readings?start=...&end=...&location=EE|LV|FI
+  - location supports one or many values (e.g. `location=EE` or `location=EE,LV,FI`)

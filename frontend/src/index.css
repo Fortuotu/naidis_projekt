@@ -34,7 +34,7 @@ body {
   font-size: 0.9rem;
 }
 
-.filters input,
+.filters input:not([type='checkbox']),
 .filters select,
 .filters button {
   height: 2.3rem;
@@ -54,6 +54,31 @@ body {
 .filters button[disabled] {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.location-filter {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  min-height: 2.3rem;
+  margin: 0;
+}
+
+.location-filter legend {
+  font-size: 0.85rem;
+  padding: 0 0.3rem;
+}
+
+.location-options {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.location-options label {
+  display: inline-flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 0.35rem;
 }
 
 .sync-card {
@@ -155,6 +180,27 @@ svg {
 .stats {
   display: flex;
   gap: 1rem;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend i {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 999px;
+  display: inline-block;
 }
 
 table {

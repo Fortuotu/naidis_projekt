@@ -218,8 +218,11 @@ function App() {
   const [filterError, setFilterError] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
   const [syncError, setSyncError] = useState('');
+  const [cleanupMessage, setCleanupMessage] = useState('');
+  const [cleanupError, setCleanupError] = useState('');
   const [readingsLoading, setReadingsLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   const validReadings = useMemo(() => {
     return readings.filter(reading => {
@@ -370,7 +373,7 @@ function App() {
       }
       return [...current, location];
     });
-  }2
+  }
 
   async function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -427,6 +430,33 @@ function App() {
       setSyncError(text);
     } finally {
       setSyncLoading(false);
+    }
+  }
+
+  async function handleCleanup() {
+    setCleanupError('');
+    setCleanupMessage('');
+    setCleanupLoading(true);
+
+    try {
+      const response = await fetch('/api/readings?source=UPLOAD', {
+        method: 'DELETE'
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Cleanup failed. Please try again.');
+      }
+
+      setCleanupMessage(payload.message || 'Deleted uploaded records.');
+      await fetchReadings();
+    } catch (cleanupRequestError) {
+      const text = cleanupRequestError instanceof Error
+        ? cleanupRequestError.message
+        : 'Cleanup failed. Please try again.';
+      setCleanupError(text);
+    } finally {
+      setCleanupLoading(false);
     }
   }
 
@@ -520,6 +550,18 @@ function App() {
         </form>
         {syncMessage && <p className="success">{syncMessage}</p>}
         {syncError && <p className="error">{syncError}</p>}
+        <button
+          type="button"
+          className="cleanup-button"
+          disabled={cleanupLoading}
+          onClick={() => {
+            void handleCleanup();
+          }}
+        >
+          {cleanupLoading ? 'Loading...' : 'Delete UPLOAD data'}
+        </button>
+        {cleanupMessage && <p className="success">{cleanupMessage}</p>}
+        {cleanupError && <p className="error">{cleanupError}</p>}
       </section>
 
       <form className="filters" onSubmit={handleFilterSubmit}>

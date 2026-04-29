@@ -9,3 +9,13 @@ API:
   errors: { "error": "PRICE_API_UNAVAILABLE" } when external API is unavailable
 - GET /api/readings?start=...&end=...&location=EE|LV|FI
   - location supports one or many values (e.g. `location=EE` or `location=EE,LV,FI`)
+  - validates that start/end are ISO-8601 UTC timestamps with timezone and that end > start
+- DELETE /api/readings?source=UPLOAD
+  - deletes only records where `source = "UPLOAD"`
+  - responses:
+    - `Deleted X uploaded records.`
+    - `No UPLOAD records found.`
+    - `Cleanup failed. Please try again.`
+
+Tests:
+- backend: `npm test`

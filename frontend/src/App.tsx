@@ -78,15 +78,71 @@ function scalePoints(points: TimePoint[]) {
     .join(' ');
 }
 
-function SingleLineChart({ title, points }: { title: string; points: TimePoint[] }) {
+function formatPrice(value: number) {
+  return `${value.toFixed(2)} EUR/MWh`;
+}
+
+function AxisLabels({
+  xLabel,
+  yLabel,
+  xLower,
+  xUpper,
+  yLower,
+  yUpper
+}: {
+  xLabel: string;
+  yLabel: string;
+  xLower: string;
+  xUpper: string;
+  yLower: string;
+  yUpper: string;
+}) {
+  return (
+    <div className="axis-labels">
+      <span>
+        <strong>X-axis:</strong> {xLabel} (lower: {xLower}, upper: {xUpper})
+      </span>
+      <span>
+        <strong>Y-axis:</strong> {yLabel} (lower: {yLower}, upper: {yUpper})
+      </span>
+    </div>
+  );
+}
+
+function SingleLineChart({
+  title,
+  points,
+  xLabel,
+  yLabel
+}: {
+  title: string;
+  points: TimePoint[];
+  xLabel: string;
+  yLabel: string;
+}) {
   if (points.length === 0) {
     return (
       <section className="chart-card">
         <h2>{title}</h2>
         <p>Andmed puuduvad valitud filtriga.</p>
+        <AxisLabels
+          xLabel={xLabel}
+          yLabel={yLabel}
+          xLower="-"
+          xUpper="-"
+          yLower="-"
+          yUpper="-"
+        />
       </section>
     );
   }
+
+  const xValues = points.map(point => point.x);
+  const yValues = points.map(point => point.y);
+  const minX = Math.min(...xValues);
+  const maxX = Math.max(...xValues);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
 
   return (
     <section className="chart-card">
@@ -94,17 +150,43 @@ function SingleLineChart({ title, points }: { title: string; points: TimePoint[]
       <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label={title}>
         <polyline points={scalePoints(points)} fill="none" stroke="#2563eb" strokeWidth="3" />
       </svg>
+      <AxisLabels
+        xLabel={xLabel}
+        yLabel={yLabel}
+        xLower={new Date(minX).toLocaleString()}
+        xUpper={new Date(maxX).toLocaleString()}
+        yLower={formatPrice(minY)}
+        yUpper={formatPrice(maxY)}
+      />
     </section>
   );
 }
 
-function MultiLineChart({ title, series }: { title: string; series: LineSeries[] }) {
+function MultiLineChart({
+  title,
+  series,
+  xLabel,
+  yLabel
+}: {
+  title: string;
+  series: LineSeries[];
+  xLabel: string;
+  yLabel: string;
+}) {
   const nonEmptySeries = series.filter(item => item.points.length > 0);
   if (nonEmptySeries.length === 0) {
     return (
       <section className="chart-card">
         <h2>{title}</h2>
         <p>Andmed puuduvad valitud filtriga.</p>
+        <AxisLabels
+          xLabel={xLabel}
+          yLabel={yLabel}
+          xLower="-"
+          xUpper="-"
+          yLower="-"
+          yUpper="-"
+        />
       </section>
     );
   }
@@ -141,6 +223,14 @@ function MultiLineChart({ title, series }: { title: string; series: LineSeries[]
           );
         })}
       </svg>
+      <AxisLabels
+        xLabel={xLabel}
+        yLabel={yLabel}
+        xLower={new Date(minX).toLocaleString()}
+        xUpper={new Date(maxX).toLocaleString()}
+        yLower={formatPrice(minY)}
+        yUpper={formatPrice(maxY)}
+      />
       <div className="legend">
         {series.map(item => (
           <span key={item.label}>
@@ -155,20 +245,33 @@ function MultiLineChart({ title, series }: { title: string; series: LineSeries[]
 
 function LocationBarChart({
   title,
-  values
+  values,
+  xLabel,
+  yLabel
 }: {
   title: string;
   values: Array<{ location: LocationCode; avg: number }>;
+  xLabel: string;
+  yLabel: string;
 }) {
   if (values.length === 0) {
     return (
       <section className="chart-card">
         <h2>{title}</h2>
         <p>Andmed puuduvad valitud filtriga.</p>
+        <AxisLabels
+          xLabel={xLabel}
+          yLabel={yLabel}
+          xLower="-"
+          xUpper="-"
+          yLower="-"
+          yUpper="-"
+        />
       </section>
     );
   }
 
+  const minValue = Math.min(...values.map(value => value.avg));
   const maxValue = Math.max(...values.map(value => value.avg));
   const barWidth = CHART_WIDTH / values.length;
 
@@ -193,6 +296,14 @@ function LocationBarChart({
           );
         })}
       </svg>
+      <AxisLabels
+        xLabel={xLabel}
+        yLabel={yLabel}
+        xLower={values[0].location}
+        xUpper={values[values.length - 1].location}
+        yLower={formatPrice(minValue)}
+        yUpper={formatPrice(maxValue)}
+      />
       <div className="legend">
         {values.map(value => (
           <span key={value.location}>
@@ -610,10 +721,30 @@ function App() {
         {locationCounts.map(item => `${item.location}: ${item.count} kirjet`).join(' | ')}
       </p>
 
-      <SingleLineChart title="1) Price over time" points={priceOverTimePoints} />
-      <SingleLineChart title="2) Daily average price in selected date range" points={dailyAveragePoints} />
-      <LocationBarChart title="3) Average price per selected location" values={averageByLocation} />
-      <MultiLineChart title="4) Compare prices per location on selected period" series={compareSeries} />
+      <SingleLineChart
+        title="1) Price over time"
+        points={priceOverTimePoints}
+        xLabel="Timestamp"
+        yLabel="Price (EUR/MWh)"
+      />
+      <SingleLineChart
+        title="2) Daily average price in selected date range"
+        points={dailyAveragePoints}
+        xLabel="Day"
+        yLabel="Average price (EUR/MWh)"
+      />
+      <LocationBarChart
+        title="3) Average price per selected location"
+        values={averageByLocation}
+        xLabel="Location"
+        yLabel="Average price (EUR/MWh)"
+      />
+      <MultiLineChart
+        title="4) Compare prices per location on selected period"
+        series={compareSeries}
+        xLabel="Timestamp"
+        yLabel="Price (EUR/MWh)"
+      />
 
       {stats && (
         <section className="stats">

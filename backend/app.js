@@ -197,7 +197,7 @@ function createApp({ sequelize, EnergyReadings, fetchImpl = global.fetch } = {})
         throw new Error('External API response shape is invalid');
       }
 
-      const readingsToSave = sourceReadings
+      const incomingReadings = sourceReadings
         .filter(reading =>
           Number.isFinite(reading?.timestamp) && Number.isFinite(reading?.price)
         )
@@ -208,10 +208,73 @@ function createApp({ sequelize, EnergyReadings, fetchImpl = global.fetch } = {})
           source: 'API'
         }));
 
+      const readingsByKey = new Map();
+      for (const reading of incomingReadings) {
+        readingsByKey.set(`${reading.timestamp.toISOString()}|${reading.location}`, reading);
+      }
+      const readingsToSave = Array.from(readingsByKey.values());
+
       if (readingsToSave.length > 0) {
-        await EnergyReadings.bulkCreate(readingsToSave, {
-          updateOnDuplicate: ['price_eur_mwh', 'source', 'updatedAt']
+        const timestamps = readingsToSave.map(reading => reading.timestamp.getTime());
+        const minTimestamp = new Date(Math.min(...timestamps));
+        const maxTimestamp = new Date(Math.max(...timestamps));
+
+        const existingRows = await EnergyReadings.findAll({
+          where: {
+            location,
+            timestamp: {
+              [Op.gte]: minTimestamp,
+              [Op.lte]: maxTimestamp
+            }
+          },
+          order: [['timestamp', 'ASC'], ['id', 'DESC']]
         });
+
+        const existingByKey = new Map();
+        const duplicateIds = [];
+
+        for (const row of existingRows) {
+          const key = `${row.timestamp.toISOString()}|${row.location}`;
+          if (!existingByKey.has(key)) {
+            existingByKey.set(key, row);
+            continue;
+          }
+          duplicateIds.push(row.id);
+        }
+
+        if (duplicateIds.length > 0) {
+          await EnergyReadings.destroy({
+            where: {
+              id: {
+                [Op.in]: duplicateIds
+              }
+            }
+          });
+        }
+
+        for (const reading of readingsToSave) {
+          const key = `${reading.timestamp.toISOString()}|${reading.location}`;
+          const existing = existingByKey.get(key);
+
+          if (!existing) {
+            await EnergyReadings.create(reading);
+            continue;
+          }
+
+          if (existing.price_eur_mwh !== reading.price_eur_mwh || existing.source !== 'API') {
+            await EnergyReadings.update(
+              {
+                price_eur_mwh: reading.price_eur_mwh,
+                source: 'API'
+              },
+              {
+                where: {
+                  id: existing.id
+                }
+              }
+            );
+          }
+        }
       }
 
       return res.json({
@@ -323,10 +386,22 @@ function createApp({ sequelize, EnergyReadings, fetchImpl = global.fetch } = {})
           [Op.lte]: range.endDate
         }
       },
-      order: [['timestamp', 'ASC'], ['location', 'ASC']]
+      order: [['timestamp', 'ASC'], ['location', 'ASC'], ['id', 'DESC']]
     });
 
-    return res.json(readings);
+    const deduplicated = [];
+    const seenKeys = new Set();
+
+    for (const reading of readings) {
+      const key = `${reading.timestamp.toISOString()}|${reading.location}`;
+      if (seenKeys.has(key)) {
+        continue;
+      }
+      seenKeys.add(key);
+      deduplicated.push(reading);
+    }
+
+    return res.json(deduplicated);
   }));
 
   app.delete('/api/readings', asyncHandler(async (req, res) => {

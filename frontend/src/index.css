@@ -206,6 +206,15 @@ svg {
   font-size: 0.9rem;
 }
 
+.axis-labels {
+  margin: 0.65rem 0 0;
+  font-size: 0.88rem;
+  color: #334155;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
 .legend span {
   display: inline-flex;
   align-items: center;
